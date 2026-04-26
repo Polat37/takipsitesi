@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bulut Takip Paneli</title>
+    <style>
+        :root { --bg: #f0f2f5; --card: #ffffff; --primary: #4a90e2; --danger: #e74c3c; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; padding: 20px; display: flex; justify-content: center; }
+        .main-layout { display: flex; gap: 30px; max-width: 1000px; width: 100%; flex-wrap: wrap; }
+        .form-container { background: var(--card); padding: 25px; border-radius: 15px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); flex: 1; min-width: 300px; position: sticky; top: 20px; height: fit-content; }
+        .history-container { flex: 1.5; min-width: 320px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input, select { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
+        button.save-btn { width: 100%; padding: 12px; background: var(--primary); color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; width: 100%; }
+        .log-item { background: white; padding: 15px; border-radius: 10px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border-left: 5px solid var(--primary); box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .date-label { font-size: 0.8em; color: #888; font-weight: bold; }
+        .delete-btn { background: none; border: none; cursor: pointer; font-size: 18px; color: #ccc; transition: 0.3s; }
+        .delete-btn:hover { color: var(--danger); }
+        @media (max-width: 800px) { .form-container { position: static; } }
+    </style>
+</head>
+<body>
+
+<div class="main-layout">
+    <div class="form-container">
+        <h2>Yeni Kayıt</h2>
+        <div class="form-group">
+            <label>Gün Durumu</label>
+            <select id="status"><option value="✅">Başarılı ✅</option><option value="❌">Başarısız ❌</option></select>
+        </div>
+        <div class="form-group">
+            <label>Sigara Sayısı</label>
+            <input type="number" id="cigCount" placeholder="0">
+        </div>
+        <div class="form-group">
+            <label>Ekran Süresi (Saat)</label>
+            <input type="number" id="screenTime" step="0.1" placeholder="0.0">
+        </div>
+        <button class="save-btn" id="btnKaydet">Buluta Kaydet</button>
+    </div>
+
+    <div class="history-container">
+        <h3>Geçmiş Günler (Anlık Senkronize)</h3>
+        <div id="historyList">Yükleniyor...</div>
+    </div>
+</div>
+
+<script type="module">
+  // Firebase kütüphanelerini içe aktar
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+  import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+  // Senin paylaştığın config bilgileri
+  const firebaseConfig = {
+    apiKey: "AIzaSyBc9NsIqeIbJNA9Gav8umNoV_bo5N0Cuqw",
+    authDomain: "takip-sitesi.firebaseapp.com",
+    projectId: "takip-sitesi",
+    storageBucket: "takip-sitesi.firebasestorage.app",
+    messagingSenderId: "743776445169",
+    appId: "1:743776445169:web:54b57db80f7d8fd71f7f50",
+    measurementId: "G-70L4W6L038"
+  };
+
+  // Firebase'i başlat
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const logsCol = collection(db, "logs");
+
+  // Kaydetme Fonksiyonu
+  document.getElementById('btnKaydet').addEventListener('click', async () => {
+    const status = document.getElementById('status').value;
+    const cigCount = document.getElementById('cigCount').value || 0;
+    const screenTime = document.getElementById('screenTime').value || 0;
+
+    try {
+        await addDoc(logsCol, {
+            status,
+            cigCount,
+            screenTime,
+            createdAt: new Date().getTime(),
+            dateStr: new Date().toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', hour: '2-digit', minute: '2-digit' })
+        });
+        document.getElementById('cigCount').value = '';
+        document.getElementById('screenTime').value = '';
+    } catch (e) {
+        alert("Hata! Firestore veritabanını 'Test Modunda' açtığınızdan emin olun.");
+    }
+  });
+
+  // Silme Fonksiyonu (Dışarıdan erişim için window'a bağladık)
+  window.deleteLog = async (id) => {
+    if(confirm("Bu kaydı silmek istediğine emin misin?")) {
+        await deleteDoc(doc(db, "logs", id));
+    }
+  };
+
+  // Verileri Dinle ve Listele
+  const q = query(logsCol, orderBy("createdAt", "desc"));
+  onSnapshot(q, (snapshot) => {
+    const historyList = document.getElementById('historyList');
+    historyList.innerHTML = '';
+    
+    if(snapshot.empty) {
+        historyList.innerHTML = '<p style="color:#888">Henüz kayıt yok.</p>';
+        return;
+    }
+
+    snapshot.forEach((doc) => {
+      const log = doc.data();
+      const div = document.createElement('div');
+      div.className = 'log-item';
+      div.innerHTML = `
+        <div style="font-size:1.5em; margin-right:15px;">${log.status}</div>
+        <div style="flex-grow:1">
+            <div class="date-label">${log.dateStr}</div>
+            <div style="font-size:0.9em">Sigara: <b>${log.cigCount}</b> | Ekran: <b>${log.screenTime} sa</b></div>
+        </div>
+        <button class="delete-btn" onclick="deleteLog('${doc.id}')">🗑️</button>
+      `;
+      historyList.appendChild(div);
+    });
+  });
+</script>
+
+</body>
+</html>
