@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html lang="tr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bulut Takip Paneli</title>
-    <style>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Takip Sitesi</title>
+        <style>
         :root { --bg: #f0f2f5; --card: #ffffff; --primary: #4a90e2; --danger: #e74c3c; }
         body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; padding: 20px; display: flex; justify-content: center; }
         .main-layout { display: flex; gap: 30px; max-width: 1000px; width: 100%; flex-wrap: wrap; }
@@ -20,39 +20,50 @@
         .delete-btn:hover { color: var(--danger); }
         @media (max-width: 800px) { .form-container { position: static; } }
     </style>
-</head>
-<body>
+    </head>
+    <body>
 
-<div class="main-layout">
-    <div class="form-container">
-        <h2>Yeni Kayıt</h2>
-        <div class="form-group">
-            <label>Gün Durumu</label>
-            <select id="status"><option value="✅">Başarılı ✅</option><option value="❌">Başarısız ❌</option></select>
-        </div>
-        <div class="form-group">
-            <label>Sigara Sayısı</label>
-            <input type="number" id="cigCount" placeholder="0">
-        </div>
-        <div class="form-group">
-            <label>Ekran Süresi (Saat)</label>
-            <input type="number" id="screenTime" step="0.1" placeholder="0.0">
-        </div>
-        <button class="save-btn" id="btnKaydet">Buluta Kaydet</button>
-    </div>
+        <div class="main-layout">
+            <div class="form-container">
+                <h2>Yeni Kayıt</h2>
 
-    <div class="history-container">
-        <h3>Geçmiş Günler (Anlık Senkronize)</h3>
-        <div id="historyList">Yükleniyor...</div>
-    </div>
-</div>
+                <div class="form-group">
+                    <label>Kayıt Tarihi</label>
+                    <input type="date" id="recordDate">
+                </div>
 
-<script type="module">
-  // Firebase kütüphanelerini içe aktar
+                <div class="form-group">
+                    <label>Gün Durumu</label>
+                    <select id="status">
+                        <option value="✅">Başarılı ✅</option>
+                        <option value="❌">Başarısız ❌</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Sigara Sayısı</label>
+                    <input type="number" id="cigCount" placeholder="0">
+                </div>
+
+                <div class="form-group">
+                    <label>Ekran Süresi (Saat)</label>
+                    <input type="number" id="screenTime" step="0.1"
+                        placeholder="0.0">
+                </div>
+
+                <button class="save-btn" id="btnKaydet">Buluta Kaydet</button>
+            </div>
+
+            <div class="history-container">
+                <h3>Geçmiş Günler</h3>
+                <div id="historyList">Yükleniyor...</div>
+            </div>
+        </div>
+
+        <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
   import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-  // Senin paylaştığın config bilgileri
   const firebaseConfig = {
     apiKey: "AIzaSyBc9NsIqeIbJNA9Gav8umNoV_bo5N0Cuqw",
     authDomain: "takip-sitesi.firebaseapp.com",
@@ -63,50 +74,52 @@
     measurementId: "G-70L4W6L038"
   };
 
-  // Firebase'i başlat
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
   const logsCol = collection(db, "logs");
 
-  // Kaydetme Fonksiyonu
+  // Sayfa açıldığında bugünün tarihini otomatik seç
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('recordDate').value = today;
+
   document.getElementById('btnKaydet').addEventListener('click', async () => {
+    const selectedDate = document.getElementById('recordDate').value;
     const status = document.getElementById('status').value;
     const cigCount = document.getElementById('cigCount').value || 0;
     const screenTime = document.getElementById('screenTime').value || 0;
+
+    if(!selectedDate) {
+        alert("Lütfen bir tarih seç!");
+        return;
+    }
+
+    // Seçilen tarihi daha güzel görünmesi için formatla
+    const dateObj = new Date(selectedDate);
+    const dateStr = dateObj.toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', year: 'numeric' });
 
     try {
         await addDoc(logsCol, {
             status,
             cigCount,
             screenTime,
-            createdAt: new Date().getTime(),
-            dateStr: new Date().toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', hour: '2-digit', minute: '2-digit' })
+            createdAt: dateObj.getTime(), // Sıralama için seçilen tarihi kullanıyoruz
+            dateStr: dateStr
         });
         document.getElementById('cigCount').value = '';
         document.getElementById('screenTime').value = '';
     } catch (e) {
-        alert("Hata! Firestore veritabanını 'Test Modunda' açtığınızdan emin olun.");
+        alert("Hata oluştu! Kuralları 'true' yaptığından emin ol.");
     }
   });
 
-  // Silme Fonksiyonu (Dışarıdan erişim için window'a bağladık)
   window.deleteLog = async (id) => {
-    if(confirm("Bu kaydı silmek istediğine emin misin?")) {
-        await deleteDoc(doc(db, "logs", id));
-    }
+    if(confirm("Silmek istiyor musun?")) await deleteDoc(doc(db, "logs", id));
   };
 
-  // Verileri Dinle ve Listele
   const q = query(logsCol, orderBy("createdAt", "desc"));
   onSnapshot(q, (snapshot) => {
     const historyList = document.getElementById('historyList');
     historyList.innerHTML = '';
-    
-    if(snapshot.empty) {
-        historyList.innerHTML = '<p style="color:#888">Henüz kayıt yok.</p>';
-        return;
-    }
-
     snapshot.forEach((doc) => {
       const log = doc.data();
       const div = document.createElement('div');
@@ -124,5 +137,5 @@
   });
 </script>
 
-</body>
+    </body>
 </html>
